@@ -1,0 +1,13 @@
+# secrets
+.env
+
+# local environment / caches
+.venv/
+.cache/
+__pycache__/
+*.pyc
+console-recordings/
+
+# call output (recordings, transcripts, analyses) and generated reports stay local
+calls/
+reports/

@@ -1,0 +1,9 @@
+# Pinned to livekit-agents 1.8.3 (Sep 2026): the voice pipeline, recorder and SIP APIs used here were
+# verified against this release. Plugins are versioned in lockstep with the core package.
+livekit-agents[anthropic,cartesia,deepgram,silero,turn-detector]==1.8.3
+livekit-api==1.2.2
+anthropic==0.125.0
+httpx==0.28.1
+pydantic==2.14.1
+python-dotenv==1.2.4
+PyYAML==6.0.3
