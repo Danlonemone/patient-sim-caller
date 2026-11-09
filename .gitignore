@@ -11,3 +11,6 @@ console-recordings/
 # call output (recordings, transcripts, analyses) and generated reports stay local
 calls/
 reports/
+
+# test caches
+.pytest_cache/
