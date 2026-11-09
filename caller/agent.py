@@ -15,7 +15,6 @@ import asyncio
 import json
 import logging
 import os
-import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -54,6 +53,7 @@ from .config import (
     require,
 )
 from .persona import Scenario, build_instructions, load_scenarios
+from .speech import HANGUP_MARKER, SpeechFilter
 
 logger = logging.getLogger("patient-caller")
 
@@ -61,10 +61,6 @@ CLINIC_IDENTITY = "clinic"
 GREETING_GRACE_S = 8.0  # the clinic normally speaks first; nudge only if it stays silent
 GREETING_MAX_S = 15.0  # stop waiting for the clinic's "how can I help?" after this long
 DEFAULT_MAX_MINUTES = 4.0
-HANGUP_MARKER = "<hangup>"
-# Deepgram Aura-2 renders filler sounds badly ("um" came out as "Bob", "hmm" as "Him"), and the
-# prompt alone didn't stop the LLM writing them, so they're removed from the stream before TTS.
-FILLERS = re.compile(r"\b(?:[Uu]m+|[Uu]h+|[Hh]mm+|[Hh]m)\b[,.]?\s*")
 HANGUP_WAIT_FOR_CLINIC_S = 5.0  # let the clinic finish its closing line before we hang up
 
 # livekit-plugins-anthropic 1.8.3 only knows that the 4.6 models reject assistant-message prefill;
@@ -114,38 +110,20 @@ class PatientAgent(Agent):
 
     async def llm_node(self, chat_ctx, tools, model_settings):  # type: ignore[override]
         self.wants_to_hang_up = False
-        held = ""  # trailing text that could still turn into the marker
+        speech = SpeechFilter()  # strips the hang-up marker and filler words (see speech.py)
         async for chunk in Agent.default.llm_node(self, chat_ctx, tools, model_settings):
             text = chunk.delta.content if isinstance(chunk, llm.ChatChunk) and chunk.delta else None
             if text is None:
                 yield chunk
                 continue
-            if self.wants_to_hang_up:
-                continue
-            held += text
-            if HANGUP_MARKER in held:
+            out = speech.feed(text)
+            if speech.hung_up:
                 self.wants_to_hang_up = True
-                before = FILLERS.sub("", held.split(HANGUP_MARKER)[0])
-                if before:
-                    yield before
-                held = ""
-                continue
-            keep = _marker_prefix_len(held)
-            if len(held) > keep:
-                out = FILLERS.sub("", held[: len(held) - keep])
-                if out:
-                    yield out
-                held = held[len(held) - keep :]
-        if held:
-            yield FILLERS.sub("", held)
-
-
-def _marker_prefix_len(text: str) -> int:
-    """Length of the longest suffix of `text` that is a proper prefix of HANGUP_MARKER."""
-    for k in range(min(len(text), len(HANGUP_MARKER) - 1), 0, -1):
-        if text.endswith(HANGUP_MARKER[:k]):
-            return k
-    return 0
+            if out:
+                yield out
+        tail = speech.flush()
+        if tail:
+            yield tail
 
 
 class CallLog:
