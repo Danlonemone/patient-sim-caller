@@ -1,0 +1,18 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The tests cover the parts that don't need the voice stack, so CI skips the
+      # ~460 MB LiveKit/model install and only pulls what config.py and persona.py import.
+      - run: pip install PyYAML==6.0.3 python-dotenv==1.2.4 pytest
+      - run: pytest -q

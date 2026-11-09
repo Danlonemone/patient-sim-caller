@@ -66,25 +66,33 @@ analyzer. Change `clinic`, `clinic_type` and the personas to match the agent you
 
 ## Results
 
-I ran 20 calls against a demo AI receptionist for an orthopedic practice, covering 17 scenarios,
-and kept 13 findings after checking each one against the audio.
+I ran 20 calls against a third-party demo AI receptionist, covering 17 scenarios, and kept 13
+findings after checking each one against the audio. The findings themselves stay private, since
+the agent isn't mine; this section covers what the tool measured and what it is built to catch.
 
 **Latency.** From the moment the receptionist stops talking to the moment the patient starts, the
 median is about **1.3–1.4 s**: roughly 0.6 s end-of-turn detection, 0.6 s to the LLM's first token
 and 0.15–0.2 s to the first audio. Early versions sat at 1.7–2.0 s; most of the gain came from
 removing a single tool definition (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 
-**What it catches.** The most useful findings were the kind a scripted test wouldn't reach:
+**What it probes.** Beyond routine booking, rescheduling and refills, the scenarios push on the
+failures a scripted test rarely reaches:
 
-- saying it accepts insurance plans it can't know about, including a made-up one
-- giving out a patient's appointment details to a family member who hadn't been verified
-- missing blood-clot warning signs until the caller asked about them directly
-- reading the caller's phone number back as their insurance member ID
-- silently skipping over a date that doesn't exist instead of saying so
-- greeting callers by the on-file patient's name based on caller ID alone
+- **Privacy:** a relative calling from the patient's phone asks about his appointments and
+  medications without being an authorised contact.
+- **Invented facts:** questions about specific insurance plans, including one that doesn't exist,
+  to see whether the agent claims coverage it can't know.
+- **Safety:** a caller downplays blood-clot warning signs to see whether the agent escalates on
+  its own.
+- **Bad input:** a request for November 31st, a date of birth corrected mid-sentence, and a
+  member ID that has to be read back digit by digit.
+- **Scope and injection:** a dosing question the receptionist shouldn't answer, an attempt to
+  override its instructions, and an early refill of a controlled substance.
+- **Turn-taking:** an on-topic interruption mid-sentence, to check that the agent acts on the
+  change instead of the original request.
 
-One finding turned out to be our own speech-to-text mishearing a doctor's name, which is why
-every draft finding is checked against the recording before it counts.
+One draft finding turned out to be the caller's own speech-to-text mishearing a doctor's name,
+which is why every draft finding is checked against the recording before it counts.
 
 **What it taught me about the caller.** Most of the work went into making the bot sound like a
 person rather than a test script. Every behaviour described in ARCHITECTURE.md came from listening
@@ -134,11 +142,24 @@ Creates the LiveKit outbound SIP trunk and writes `LIVEKIT_SIP_TRUNK_ID` into `.
 Set `TARGET_NUMBER` to the receptionist line you're testing and add the same number to
 `ALLOWED_TARGETS`.
 
+## Tests
+
+```bash
+pip install pytest
+pytest
+```
+
+The tests cover the logic that can break silently without a phone call: the hang-up marker is
+never spoken even when it streams in split across chunks, filler words are stripped, the bot
+refuses any number that isn't valid and allowlisted, and every scenario in `scenarios.yaml` is
+complete and renders into a clean prompt. They run in CI on every push.
+
 ## Repository layout
 
 ```
 caller/
   agent.py         LiveKit worker: pipeline session, dial-out, recording, end-call, safety limits
+  speech.py        strips the hang-up marker and filler words from the reply stream before TTS
   persona.py       loads scenarios and builds the patient's system prompt
   scenarios.yaml   clinic, personas + test scenarios
   run.py           single entry point (worker + calls + transcripts + analysis)
@@ -147,6 +168,7 @@ caller/
   latency.py       response-latency report from the per-turn metrics
   setup_trunk.py   one-time LiveKit outbound trunk registration
   config.py        env loading, paths, the target-number allowlist check
+tests/             pytest suite (no API keys or LiveKit install needed)
 calls/             one folder per call (created on first run; not committed)
 reports/           machine-generated findings draft (not committed)
 ```
