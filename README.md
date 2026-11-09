@@ -83,8 +83,8 @@ removing a single tool definition (see [ARCHITECTURE.md](ARCHITECTURE.md)).
 - silently skipping over a date that doesn't exist instead of saying so
 - greeting callers by the on-file patient's name based on caller ID alone
 
-One finding turned out to be our own speech-to-text mishearing a doctor's name, which is why
-every draft finding is checked against the recording before it counts.
+One finding turned out to be the caller's own speech-to-text mishearing a doctor's name, which is
+why every draft finding is checked against the recording before it counts.
 
 **What it taught me about the caller.** Most of the work went into making the bot sound like a
 person rather than a test script. Every behaviour described in ARCHITECTURE.md came from listening
@@ -134,11 +134,24 @@ Creates the LiveKit outbound SIP trunk and writes `LIVEKIT_SIP_TRUNK_ID` into `.
 Set `TARGET_NUMBER` to the receptionist line you're testing and add the same number to
 `ALLOWED_TARGETS`.
 
+## Tests
+
+```bash
+pip install pytest
+pytest
+```
+
+The tests cover the logic that can break silently without a phone call: the hang-up marker is
+never spoken even when it streams in split across chunks, filler words are stripped, the bot
+refuses any number that isn't valid and allowlisted, and every scenario in `scenarios.yaml` is
+complete and renders into a clean prompt. They run in CI on every push.
+
 ## Repository layout
 
 ```
 caller/
   agent.py         LiveKit worker: pipeline session, dial-out, recording, end-call, safety limits
+  speech.py        strips the hang-up marker and filler words from the reply stream before TTS
   persona.py       loads scenarios and builds the patient's system prompt
   scenarios.yaml   clinic, personas + test scenarios
   run.py           single entry point (worker + calls + transcripts + analysis)
@@ -147,6 +160,7 @@ caller/
   latency.py       response-latency report from the per-turn metrics
   setup_trunk.py   one-time LiveKit outbound trunk registration
   config.py        env loading, paths, the target-number allowlist check
+tests/             pytest suite (no API keys or LiveKit install needed)
 calls/             one folder per call (created on first run; not committed)
 reports/           machine-generated findings draft (not committed)
 ```
